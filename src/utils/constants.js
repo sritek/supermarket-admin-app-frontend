@@ -1,0 +1,43 @@
+export const ROLES = {
+  ADMIN: 'ADMIN',
+  INVENTORY_MANAGER: 'INVENTORY_MANAGER',
+  EMPLOYEE: 'EMPLOYEE',
+};
+
+export const ORDER_STATUS = {
+  PLACED: 'PLACED',
+  PROCESSING: 'PROCESSING',
+  PACKED: 'PACKED',
+  OUT_FOR_DELIVERY: 'OUT_FOR_DELIVERY',
+  DELIVERED: 'DELIVERED',
+  CANCELLED: 'CANCELLED',
+};
+
+export const ORDER_STATUS_LABELS = {
+  PLACED: 'Placed',
+  PROCESSING: 'Processing',
+  PACKED: 'Packed',
+  OUT_FOR_DELIVERY: 'Out for Delivery',
+  DELIVERED: 'Delivered',
+  CANCELLED: 'Cancelled',
+};
+
+export const PRODUCT_STATUS = {
+  ACTIVE: 'ACTIVE',
+  INACTIVE: 'INACTIVE',
+};
+
+export const INVENTORY_REASONS = {
+  PURCHASE: 'PURCHASE',
+  DAMAGE: 'DAMAGE',
+  MANUAL_CORRECTION: 'MANUAL_CORRECTION',
+  RETURN: 'RETURN',
+};
+
+export const INVENTORY_REASON_LABELS = {
+  PURCHASE: 'Purchase',
+  DAMAGE: 'Damage',
+  MANUAL_CORRECTION: 'Manual Correction',
+  RETURN: 'Return',
+};
+
