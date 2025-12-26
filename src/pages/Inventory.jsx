@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import api from '@/utils/api';
-import { AlertTriangle, Search } from 'lucide-react';
+import { AlertTriangle, Search, Plus, Minus } from 'lucide-react';
 import useAuthStore from '@/store/authStore';
+import { INVENTORY_REASONS, INVENTORY_REASON_LABELS } from '@/utils/constants';
 
 export default function Inventory() {
   const { user } = useAuthStore();
@@ -13,19 +18,33 @@ export default function Inventory() {
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
   const [showLowStock, setShowLowStock] = useState(false);
+  const [categories, setCategories] = useState([]);
+  
+  // Modal states
+  const [showAdjustModal, setShowAdjustModal] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [adjustmentData, setAdjustmentData] = useState({
+    adjustment: '',
+    reason: 'MANUAL_CORRECTION',
+    notes: '',
+  });
+  const [adjustmentError, setAdjustmentError] = useState('');
 
   useEffect(() => {
     fetchInventory();
     fetchAlerts();
-  }, [showLowStock, search]);
+    fetchCategories();
+  }, [showLowStock, search, categoryFilter]);
 
   const fetchInventory = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/inventory', {
-        params: { page: 1, limit: 50, lowStock: showLowStock, search },
-      });
+      const params = { page: 1, limit: 50, lowStock: showLowStock, search };
+      if (categoryFilter) params.category = categoryFilter;
+      
+      const response = await api.get('/inventory', { params });
       setInventory(response.data.data);
     } catch (error) {
       console.error('Error fetching inventory:', error);
@@ -40,6 +59,59 @@ export default function Inventory() {
       setAlerts(response.data.data);
     } catch (error) {
       console.error('Error fetching alerts:', error);
+    }
+  };
+
+  const fetchCategories = async () => {
+    try {
+      const response = await api.get('/categories', { params: { isActive: true } });
+      setCategories(response.data.data);
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+    }
+  };
+
+  const handleAdjustClick = (product) => {
+    setSelectedProduct(product);
+    setAdjustmentData({
+      adjustment: '',
+      reason: 'MANUAL_CORRECTION',
+      notes: '',
+    });
+    setAdjustmentError('');
+    setShowAdjustModal(true);
+  };
+
+  const handleAdjustSubmit = async (e) => {
+    e.preventDefault();
+    setAdjustmentError('');
+
+    const adjustment = parseFloat(adjustmentData.adjustment);
+    if (isNaN(adjustment) || adjustment === 0) {
+      setAdjustmentError('Please enter a valid non-zero adjustment amount');
+      return;
+    }
+
+    const newStock = selectedProduct.stock + adjustment;
+    if (newStock < 0) {
+      setAdjustmentError(`Adjustment would result in negative stock. Current stock: ${selectedProduct.stock}`);
+      return;
+    }
+
+    try {
+      await api.post('/inventory/adjust', {
+        productId: selectedProduct._id,
+        adjustment,
+        reason: adjustmentData.reason,
+        notes: adjustmentData.notes,
+      });
+      setShowAdjustModal(false);
+      fetchInventory();
+      fetchAlerts();
+    } catch (error) {
+      console.error('Error adjusting inventory:', error);
+      const message = error.response?.data?.error || 'Failed to adjust inventory';
+      setAdjustmentError(message);
     }
   };
 
@@ -60,13 +132,25 @@ export default function Inventory() {
         )}
       </div>
 
-      <div className="flex gap-4">
+      <div className="flex gap-4 flex-wrap">
         <Button
           variant={showLowStock ? 'default' : 'outline'}
           onClick={() => setShowLowStock(!showLowStock)}
         >
           {showLowStock ? 'Show All' : 'Show Low Stock Only'}
         </Button>
+        <Select
+          value={categoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value)}
+          className="w-[200px]"
+        >
+          <option value="">All Categories</option>
+          {categories.map((cat) => (
+            <option key={cat._id} value={cat._id}>
+              {cat.name}
+            </option>
+          ))}
+        </Select>
       </div>
 
       <Card>
@@ -133,7 +217,7 @@ export default function Inventory() {
                         </TableCell>
                         {canManage && (
                           <TableCell>
-                            <Button variant="outline" size="sm">
+                            <Button variant="outline" size="sm" onClick={() => handleAdjustClick(item)}>
                               Adjust Stock
                             </Button>
                           </TableCell>
@@ -147,7 +231,86 @@ export default function Inventory() {
           )}
         </CardContent>
       </Card>
+
+      {/* Adjust Stock Modal */}
+      <Dialog open={showAdjustModal} onOpenChange={setShowAdjustModal}>
+        <DialogContent onClose={() => setShowAdjustModal(false)}>
+          <DialogHeader>
+            <DialogTitle>Adjust Stock</DialogTitle>
+            <DialogDescription>
+              Adjust inventory for {selectedProduct?.name} (SKU: {selectedProduct?.sku})
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleAdjustSubmit}>
+            <div className="space-y-4 py-4">
+              <div className="p-4 bg-muted rounded-md">
+                <div className="text-sm text-muted-foreground">Current Stock</div>
+                <div className="text-2xl font-semibold">{selectedProduct?.stock}</div>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="adjustment">
+                  Adjustment Amount *
+                  <span className="text-xs text-muted-foreground ml-2">
+                    (Use positive for increase, negative for decrease)
+                  </span>
+                </Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="adjustment"
+                    type="number"
+                    step="1"
+                    value={adjustmentData.adjustment}
+                    onChange={(e) => setAdjustmentData({ ...adjustmentData, adjustment: e.target.value })}
+                    placeholder="e.g., +10 or -5"
+                    className={adjustmentError ? 'border-destructive' : ''}
+                  />
+                </div>
+                {adjustmentData.adjustment && !isNaN(parseFloat(adjustmentData.adjustment)) && (
+                  <div className="text-sm text-muted-foreground">
+                    New stock will be: {selectedProduct?.stock + parseFloat(adjustmentData.adjustment) || 0}
+                  </div>
+                )}
+                {adjustmentError && <p className="text-sm text-destructive">{adjustmentError}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="reason">Reason *</Label>
+                <Select
+                  id="reason"
+                  value={adjustmentData.reason}
+                  onChange={(e) => setAdjustmentData({ ...adjustmentData, reason: e.target.value })}
+                >
+                  {Object.entries(INVENTORY_REASON_LABELS).map(([key, label]) => (
+                    <option key={key} value={key}>
+                      {label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="notes">Notes</Label>
+                <Textarea
+                  id="notes"
+                  value={adjustmentData.notes}
+                  onChange={(e) => setAdjustmentData({ ...adjustmentData, notes: e.target.value })}
+                  rows={3}
+                  placeholder="Optional notes about this adjustment..."
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setShowAdjustModal(false)}>
+                Cancel
+              </Button>
+              <Button type="submit">
+                Apply Adjustment
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-

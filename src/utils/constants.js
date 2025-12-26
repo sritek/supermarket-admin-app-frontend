@@ -25,6 +25,13 @@ export const ORDER_STATUS_LABELS = {
 export const PRODUCT_STATUS = {
   ACTIVE: 'ACTIVE',
   INACTIVE: 'INACTIVE',
+  UNAVAILABLE: 'UNAVAILABLE',
+};
+
+export const PRODUCT_STATUS_LABELS = {
+  ACTIVE: 'Active',
+  INACTIVE: 'Inactive',
+  UNAVAILABLE: 'Unavailable',
 };
 
 export const INVENTORY_REASONS = {
