@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -6,6 +7,7 @@ import { Select } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { LoadingSpinner, LoadingSkeleton } from '@/components/ui/loading';
 import api from '@/utils/api';
 import { Plus, Search, Edit, Trash2 } from 'lucide-react';
 import useAuthStore from '@/store/authStore';
@@ -31,6 +33,8 @@ export default function Employees() {
     department: '',
   });
   const [formErrors, setFormErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetchEmployees();
@@ -95,11 +99,14 @@ export default function Employees() {
     e.preventDefault();
     if (!validateForm()) return;
 
+    setSubmitting(true);
     try {
       if (showAddModal) {
         await api.post('/employees', formData);
+        toast.success('Employee created successfully');
       } else {
         await api.put(`/employees/${selectedEmployee._id}`, formData);
+        toast.success('Employee updated successfully');
       }
 
       setShowAddModal(false);
@@ -108,19 +115,25 @@ export default function Employees() {
     } catch (error) {
       console.error('Error saving employee:', error);
       const message = error.response?.data?.error || 'Failed to save employee';
-      alert(message);
+      toast.error(message);
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handleDelete = async () => {
+    setDeleting(true);
     try {
       await api.delete(`/employees/${selectedEmployee._id}`);
+      toast.success('Employee deleted successfully');
       setShowDeleteModal(false);
       fetchEmployees();
     } catch (error) {
       console.error('Error deleting employee:', error);
       const message = error.response?.data?.error || 'Failed to delete employee';
-      alert(message);
+      toast.error(message);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -169,7 +182,17 @@ export default function Employees() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="text-center py-8 text-muted-foreground">Loading...</div>
+            <div className="space-y-4 py-8">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="flex items-center gap-4">
+                  <LoadingSkeleton className="w-24 h-6" />
+                  <LoadingSkeleton className="flex-1 h-6" />
+                  <LoadingSkeleton className="w-48 h-6" />
+                  <LoadingSkeleton className="w-32 h-6" />
+                  <LoadingSkeleton className="w-24 h-6" />
+                </div>
+              ))}
+            </div>
           ) : (
             <>
               <Table>
@@ -333,8 +356,15 @@ export default function Employees() {
               }}>
                 Cancel
               </Button>
-              <Button type="submit">
-                {showAddModal ? 'Create Employee' : 'Update Employee'}
+              <Button type="submit" disabled={submitting}>
+                {submitting ? (
+                  <>
+                    <LoadingSpinner size="sm" className="mr-2" />
+                    {showAddModal ? 'Creating...' : 'Updating...'}
+                  </>
+                ) : (
+                  showAddModal ? 'Create Employee' : 'Update Employee'
+                )}
               </Button>
             </DialogFooter>
           </form>
@@ -354,8 +384,15 @@ export default function Employees() {
             <Button variant="outline" onClick={() => setShowDeleteModal(false)}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleDelete}>
-              Delete
+            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+              {deleting ? (
+                <>
+                  <LoadingSpinner size="sm" className="mr-2" />
+                  Deleting...
+                </>
+              ) : (
+                'Delete'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

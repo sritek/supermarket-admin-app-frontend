@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -7,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { LoadingSpinner, LoadingSkeleton } from '@/components/ui/loading';
 import api from '@/utils/api';
 import { Plus, Search, Edit, Trash2, X } from 'lucide-react';
 import useAuthStore from '@/store/authStore';
@@ -42,6 +44,9 @@ export default function Products() {
     images: '',
   });
   const [formErrors, setFormErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [togglingStatus, setTogglingStatus] = useState(null);
 
   useEffect(() => {
     fetchProducts();
@@ -131,6 +136,7 @@ export default function Products() {
     e.preventDefault();
     if (!validateForm()) return;
 
+    setSubmitting(true);
     try {
       const submitData = {
         ...formData,
@@ -142,8 +148,10 @@ export default function Products() {
 
       if (showAddModal) {
         await api.post('/products', submitData);
+        toast.success('Product created successfully');
       } else {
         await api.put(`/products/${selectedProduct._id}`, submitData);
+        toast.success('Product updated successfully');
       }
 
       setShowAddModal(false);
@@ -152,29 +160,39 @@ export default function Products() {
     } catch (error) {
       console.error('Error saving product:', error);
       const message = error.response?.data?.error || 'Failed to save product';
-      alert(message);
+      toast.error(message);
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handleDelete = async () => {
+    setDeleting(true);
     try {
       await api.delete(`/products/${selectedProduct._id}`);
+      toast.success('Product deleted successfully');
       setShowDeleteModal(false);
       fetchProducts();
     } catch (error) {
       console.error('Error deleting product:', error);
       const message = error.response?.data?.error || 'Failed to delete product';
-      alert(message);
+      toast.error(message);
+    } finally {
+      setDeleting(false);
     }
   };
 
   const handleToggleStatus = async (product, newStatus) => {
+    setTogglingStatus(product._id);
     try {
       await api.put(`/products/${product._id}`, { status: newStatus });
+      toast.success(`Product status updated to ${PRODUCT_STATUS_LABELS[newStatus] || newStatus}`);
       fetchProducts();
     } catch (error) {
       console.error('Error updating status:', error);
-      alert('Failed to update status');
+      toast.error('Failed to update status');
+    } finally {
+      setTogglingStatus(null);
     }
   };
 
@@ -245,7 +263,17 @@ export default function Products() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="text-center py-8 text-muted-foreground">Loading...</div>
+            <div className="space-y-4 py-8">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="flex items-center gap-4">
+                  <LoadingSkeleton className="w-24 h-6" />
+                  <LoadingSkeleton className="flex-1 h-6" />
+                  <LoadingSkeleton className="w-32 h-6" />
+                  <LoadingSkeleton className="w-20 h-6" />
+                  <LoadingSkeleton className="w-16 h-6" />
+                </div>
+              ))}
+            </div>
           ) : (
             <>
               <Table>
@@ -296,8 +324,13 @@ export default function Products() {
                                 size="sm"
                                 onClick={() => handleToggleStatus(product, 'UNAVAILABLE')}
                                 className="h-6 px-2 text-xs"
+                                disabled={togglingStatus === product._id}
                               >
-                                Mark Unavailable
+                                {togglingStatus === product._id ? (
+                                  <LoadingSpinner size="sm" />
+                                ) : (
+                                  'Mark Unavailable'
+                                )}
                               </Button>
                             )}
                             {canManage && product.status === 'UNAVAILABLE' && (
@@ -306,8 +339,13 @@ export default function Products() {
                                 size="sm"
                                 onClick={() => handleToggleStatus(product, 'ACTIVE')}
                                 className="h-6 px-2 text-xs"
+                                disabled={togglingStatus === product._id}
                               >
-                                Mark Available
+                                {togglingStatus === product._id ? (
+                                  <LoadingSpinner size="sm" />
+                                ) : (
+                                  'Mark Available'
+                                )}
                               </Button>
                             )}
                           </div>
@@ -514,8 +552,15 @@ export default function Products() {
               }}>
                 Cancel
               </Button>
-              <Button type="submit">
-                {showAddModal ? 'Create Product' : 'Update Product'}
+              <Button type="submit" disabled={submitting}>
+                {submitting ? (
+                  <>
+                    <LoadingSpinner size="sm" className="mr-2" />
+                    {showAddModal ? 'Creating...' : 'Updating...'}
+                  </>
+                ) : (
+                  showAddModal ? 'Create Product' : 'Update Product'
+                )}
               </Button>
             </DialogFooter>
           </form>
@@ -535,8 +580,15 @@ export default function Products() {
             <Button variant="outline" onClick={() => setShowDeleteModal(false)}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleDelete}>
-              Delete
+            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+              {deleting ? (
+                <>
+                  <LoadingSpinner size="sm" className="mr-2" />
+                  Deleting...
+                </>
+              ) : (
+                'Delete'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -6,6 +7,7 @@ import { Select } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { LoadingSpinner, LoadingSkeleton } from '@/components/ui/loading';
 import api from '@/utils/api';
 import { ORDER_STATUS, ORDER_STATUS_LABELS } from '@/utils/constants';
 import { useNavigate } from 'react-router-dom';
@@ -30,6 +32,8 @@ export default function Orders() {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [newStatus, setNewStatus] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState('');
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [assigning, setAssigning] = useState(false);
 
   useEffect(() => {
     fetchOrders();
@@ -82,24 +86,32 @@ export default function Orders() {
   };
 
   const handleStatusUpdate = async () => {
+    setUpdatingStatus(true);
     try {
       await api.put(`/orders/${selectedOrder._id}/status`, { status: newStatus });
+      toast.success(`Order status updated to ${ORDER_STATUS_LABELS[newStatus] || newStatus}`);
       setShowStatusModal(false);
       fetchOrders();
     } catch (error) {
       console.error('Error updating status:', error);
-      alert('Failed to update order status');
+      toast.error('Failed to update order status');
+    } finally {
+      setUpdatingStatus(false);
     }
   };
 
   const handleAssign = async () => {
+    setAssigning(true);
     try {
       await api.put(`/orders/${selectedOrder._id}/assign`, { employeeId: selectedEmployee });
+      toast.success('Order assigned successfully');
       setShowAssignModal(false);
       fetchOrders();
     } catch (error) {
       console.error('Error assigning order:', error);
-      alert('Failed to assign order');
+      toast.error('Failed to assign order');
+    } finally {
+      setAssigning(false);
     }
   };
 
@@ -151,7 +163,17 @@ export default function Orders() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="text-center py-8 text-muted-foreground">Loading...</div>
+            <div className="space-y-4 py-8">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="flex items-center gap-4">
+                  <LoadingSkeleton className="w-32 h-6" />
+                  <LoadingSkeleton className="flex-1 h-6" />
+                  <LoadingSkeleton className="w-24 h-6" />
+                  <LoadingSkeleton className="w-32 h-6" />
+                  <LoadingSkeleton className="w-20 h-6" />
+                </div>
+              ))}
+            </div>
           ) : (
             <>
               <Table>
@@ -409,8 +431,15 @@ export default function Orders() {
             <Button variant="outline" onClick={() => setShowStatusModal(false)}>
               Cancel
             </Button>
-            <Button onClick={handleStatusUpdate}>
-              Update Status
+            <Button onClick={handleStatusUpdate} disabled={updatingStatus}>
+              {updatingStatus ? (
+                <>
+                  <LoadingSpinner size="sm" className="mr-2" />
+                  Updating...
+                </>
+              ) : (
+                'Update Status'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -446,8 +475,15 @@ export default function Orders() {
             <Button variant="outline" onClick={() => setShowAssignModal(false)}>
               Cancel
             </Button>
-            <Button onClick={handleAssign}>
-              Assign
+            <Button onClick={handleAssign} disabled={assigning}>
+              {assigning ? (
+                <>
+                  <LoadingSpinner size="sm" className="mr-2" />
+                  Assigning...
+                </>
+              ) : (
+                'Assign'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,36 +1,53 @@
-import { useEffect, useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import api from '@/utils/api';
-import { AlertTriangle, Search, Plus, Minus } from 'lucide-react';
-import useAuthStore from '@/store/authStore';
-import { INVENTORY_REASONS, INVENTORY_REASON_LABELS } from '@/utils/constants';
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { LoadingSpinner, LoadingSkeleton } from "@/components/ui/loading";
+import api from "@/utils/api";
+import { AlertTriangle, Search, Plus, Minus } from "lucide-react";
+import useAuthStore from "@/store/authStore";
+import { INVENTORY_REASONS, INVENTORY_REASON_LABELS } from "@/utils/constants";
 
 export default function Inventory() {
   const { user } = useAuthStore();
   const [inventory, setInventory] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('');
+  const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
   const [showLowStock, setShowLowStock] = useState(false);
   const [categories, setCategories] = useState([]);
-  
+
   // Modal states
   const [showAdjustModal, setShowAdjustModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [adjustmentData, setAdjustmentData] = useState({
-    adjustment: '',
-    reason: 'MANUAL_CORRECTION',
-    notes: '',
+    adjustment: "",
+    reason: "MANUAL_CORRECTION",
+    notes: "",
   });
-  const [adjustmentError, setAdjustmentError] = useState('');
+  const [adjustmentError, setAdjustmentError] = useState("");
+  const [adjusting, setAdjusting] = useState(false);
 
   useEffect(() => {
     fetchInventory();
@@ -43,11 +60,11 @@ export default function Inventory() {
       setLoading(true);
       const params = { page: 1, limit: 50, lowStock: showLowStock, search };
       if (categoryFilter) params.category = categoryFilter;
-      
-      const response = await api.get('/inventory', { params });
+
+      const response = await api.get("/inventory", { params });
       setInventory(response.data.data);
     } catch (error) {
-      console.error('Error fetching inventory:', error);
+      console.error("Error fetching inventory:", error);
     } finally {
       setLoading(false);
     }
@@ -55,74 +72,97 @@ export default function Inventory() {
 
   const fetchAlerts = async () => {
     try {
-      const response = await api.get('/inventory/alerts');
+      const response = await api.get("/inventory/alerts");
       setAlerts(response.data.data);
     } catch (error) {
-      console.error('Error fetching alerts:', error);
+      console.error("Error fetching alerts:", error);
     }
   };
 
   const fetchCategories = async () => {
     try {
-      const response = await api.get('/categories', { params: { isActive: true } });
+      const response = await api.get("/categories", {
+        params: { isActive: true },
+      });
       setCategories(response.data.data);
     } catch (error) {
-      console.error('Error fetching categories:', error);
+      console.error("Error fetching categories:", error);
     }
   };
 
   const handleAdjustClick = (product) => {
     setSelectedProduct(product);
     setAdjustmentData({
-      adjustment: '',
-      reason: 'MANUAL_CORRECTION',
-      notes: '',
+      adjustment: "",
+      reason: "MANUAL_CORRECTION",
+      notes: "",
     });
-    setAdjustmentError('');
+    setAdjustmentError("");
     setShowAdjustModal(true);
   };
 
   const handleAdjustSubmit = async (e) => {
     e.preventDefault();
-    setAdjustmentError('');
+    setAdjustmentError("");
 
     const adjustment = parseFloat(adjustmentData.adjustment);
     if (isNaN(adjustment) || adjustment === 0) {
-      setAdjustmentError('Please enter a valid non-zero adjustment amount');
+      setAdjustmentError("Please enter a valid non-zero adjustment amount");
       return;
     }
 
     const newStock = selectedProduct.stock + adjustment;
     if (newStock < 0) {
-      setAdjustmentError(`Adjustment would result in negative stock. Current stock: ${selectedProduct.stock}`);
+      setAdjustmentError(
+        `Adjustment would result in negative stock. Current stock: ${selectedProduct.stock}`
+      );
       return;
     }
 
+    setAdjusting(true);
+    setAdjustmentError("");
     try {
-      await api.post('/inventory/adjust', {
+      await api.post("/inventory/adjust", {
         productId: selectedProduct._id,
         adjustment,
         reason: adjustmentData.reason,
         notes: adjustmentData.notes,
       });
+      toast.success(
+        `Inventory adjusted by ${adjustment > 0 ? "+" : ""}${adjustment} units`
+      );
       setShowAdjustModal(false);
+      setAdjustmentData({
+        adjustment: "",
+        reason: "MANUAL_CORRECTION",
+        notes: "",
+      });
       fetchInventory();
       fetchAlerts();
     } catch (error) {
-      console.error('Error adjusting inventory:', error);
-      const message = error.response?.data?.error || 'Failed to adjust inventory';
+      console.error("Error adjusting inventory:", error);
+      const message =
+        error.response?.data?.error || "Failed to adjust inventory";
       setAdjustmentError(message);
+      toast.error(message);
+    } finally {
+      setAdjusting(false);
     }
   };
 
-  const canManage = user?.role === 'ADMIN' || user?.role === 'INVENTORY_MANAGER';
+  const canManage =
+    user?.role === "ADMIN" || user?.role === "INVENTORY_MANAGER";
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-semibold text-foreground">Inventory Management</h1>
-          <p className="text-muted-foreground mt-1">Monitor and adjust stock levels</p>
+          <h1 className="text-3xl font-semibold text-foreground">
+            Inventory Management
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Monitor and adjust stock levels
+          </p>
         </div>
         {alerts.length > 0 && (
           <div className="flex items-center gap-2 text-destructive">
@@ -134,10 +174,10 @@ export default function Inventory() {
 
       <div className="flex gap-4 flex-wrap">
         <Button
-          variant={showLowStock ? 'default' : 'outline'}
+          variant={showLowStock ? "default" : "outline"}
           onClick={() => setShowLowStock(!showLowStock)}
         >
-          {showLowStock ? 'Show All' : 'Show Low Stock Only'}
+          {showLowStock ? "Show All" : "Show Low Stock Only"}
         </Button>
         <Select
           value={categoryFilter}
@@ -169,7 +209,16 @@ export default function Inventory() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="text-center py-8 text-muted-foreground">Loading...</div>
+            <div className="space-y-4 py-8">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="flex items-center gap-4">
+                  <LoadingSkeleton className="w-24 h-6" />
+                  <LoadingSkeleton className="flex-1 h-6" />
+                  <LoadingSkeleton className="w-32 h-6" />
+                  <LoadingSkeleton className="w-20 h-6" />
+                </div>
+              ))}
+            </div>
           ) : (
             <Table>
               <TableHeader>
@@ -186,7 +235,10 @@ export default function Inventory() {
               <TableBody>
                 {inventory.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={canManage ? 7 : 6} className="text-center text-muted-foreground">
+                    <TableCell
+                      colSpan={canManage ? 7 : 6}
+                      className="text-center text-muted-foreground"
+                    >
                       No inventory items found
                     </TableCell>
                   </TableRow>
@@ -195,11 +247,19 @@ export default function Inventory() {
                     const isLowStock = item.stock <= item.lowStockThreshold;
                     return (
                       <TableRow key={item._id}>
-                        <TableCell className="font-mono text-sm">{item.sku}</TableCell>
-                        <TableCell className="font-medium">{item.name}</TableCell>
-                        <TableCell>{item.category?.name || 'N/A'}</TableCell>
+                        <TableCell className="font-mono text-sm">
+                          {item.sku}
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {item.name}
+                        </TableCell>
+                        <TableCell>{item.category?.name || "N/A"}</TableCell>
                         <TableCell>
-                          <span className={isLowStock ? 'text-destructive font-medium' : ''}>
+                          <span
+                            className={
+                              isLowStock ? "text-destructive font-medium" : ""
+                            }
+                          >
                             {item.stock}
                           </span>
                         </TableCell>
@@ -217,7 +277,11 @@ export default function Inventory() {
                         </TableCell>
                         {canManage && (
                           <TableCell>
-                            <Button variant="outline" size="sm" onClick={() => handleAdjustClick(item)}>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleAdjustClick(item)}
+                            >
                               Adjust Stock
                             </Button>
                           </TableCell>
@@ -238,16 +302,21 @@ export default function Inventory() {
           <DialogHeader>
             <DialogTitle>Adjust Stock</DialogTitle>
             <DialogDescription>
-              Adjust inventory for {selectedProduct?.name} (SKU: {selectedProduct?.sku})
+              Adjust inventory for {selectedProduct?.name} (SKU:{" "}
+              {selectedProduct?.sku})
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleAdjustSubmit}>
             <div className="space-y-4 py-4">
               <div className="p-4 bg-muted rounded-md">
-                <div className="text-sm text-muted-foreground">Current Stock</div>
-                <div className="text-2xl font-semibold">{selectedProduct?.stock}</div>
+                <div className="text-sm text-muted-foreground">
+                  Current Stock
+                </div>
+                <div className="text-2xl font-semibold">
+                  {selectedProduct?.stock}
+                </div>
               </div>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="adjustment">
                   Adjustment Amount *
@@ -261,17 +330,27 @@ export default function Inventory() {
                     type="number"
                     step="1"
                     value={adjustmentData.adjustment}
-                    onChange={(e) => setAdjustmentData({ ...adjustmentData, adjustment: e.target.value })}
+                    onChange={(e) =>
+                      setAdjustmentData({
+                        ...adjustmentData,
+                        adjustment: e.target.value,
+                      })
+                    }
                     placeholder="e.g., +10 or -5"
-                    className={adjustmentError ? 'border-destructive' : ''}
+                    className={adjustmentError ? "border-destructive" : ""}
                   />
                 </div>
-                {adjustmentData.adjustment && !isNaN(parseFloat(adjustmentData.adjustment)) && (
-                  <div className="text-sm text-muted-foreground">
-                    New stock will be: {selectedProduct?.stock + parseFloat(adjustmentData.adjustment) || 0}
-                  </div>
+                {adjustmentData.adjustment &&
+                  !isNaN(parseFloat(adjustmentData.adjustment)) && (
+                    <div className="text-sm text-muted-foreground">
+                      New stock will be:{" "}
+                      {selectedProduct?.stock +
+                        parseFloat(adjustmentData.adjustment) || 0}
+                    </div>
+                  )}
+                {adjustmentError && (
+                  <p className="text-sm text-destructive">{adjustmentError}</p>
                 )}
-                {adjustmentError && <p className="text-sm text-destructive">{adjustmentError}</p>}
               </div>
 
               <div className="space-y-2">
@@ -279,13 +358,20 @@ export default function Inventory() {
                 <Select
                   id="reason"
                   value={adjustmentData.reason}
-                  onChange={(e) => setAdjustmentData({ ...adjustmentData, reason: e.target.value })}
+                  onChange={(e) =>
+                    setAdjustmentData({
+                      ...adjustmentData,
+                      reason: e.target.value,
+                    })
+                  }
                 >
-                  {Object.entries(INVENTORY_REASON_LABELS).map(([key, label]) => (
-                    <option key={key} value={key}>
-                      {label}
-                    </option>
-                  ))}
+                  {Object.entries(INVENTORY_REASON_LABELS).map(
+                    ([key, label]) => (
+                      <option key={key} value={key}>
+                        {label}
+                      </option>
+                    )
+                  )}
                 </Select>
               </div>
 
@@ -294,18 +380,34 @@ export default function Inventory() {
                 <Textarea
                   id="notes"
                   value={adjustmentData.notes}
-                  onChange={(e) => setAdjustmentData({ ...adjustmentData, notes: e.target.value })}
+                  onChange={(e) =>
+                    setAdjustmentData({
+                      ...adjustmentData,
+                      notes: e.target.value,
+                    })
+                  }
                   rows={3}
                   placeholder="Optional notes about this adjustment..."
                 />
               </div>
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setShowAdjustModal(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowAdjustModal(false)}
+              >
                 Cancel
               </Button>
-              <Button type="submit">
-                Apply Adjustment
+              <Button type="submit" disabled={adjusting}>
+                {adjusting ? (
+                  <>
+                    <LoadingSpinner size="sm" className="mr-2" />
+                    Adjusting...
+                  </>
+                ) : (
+                  "Adjust Stock"
+                )}
               </Button>
             </DialogFooter>
           </form>
